@@ -1,0 +1,13 @@
+﻿# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Data
+data/raw/
+data/clean/*.tmp
+*.log
+
+# Browsers (if used later)
+playwright/.cache/

@@ -1,0 +1,5 @@
+﻿name: ca_post
+seed_url: ""https://post.ca.gov/le-agencies""
+rate_limit_rps: 1
+user_agent: ""Mozilla/5.0 (agency-scraper)""
+use_browser_fallback: false
