@@ -1,0 +1,7 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Keep images/binaries untouched
+*.png binary
+*.jpg binary
+*.zip binary
