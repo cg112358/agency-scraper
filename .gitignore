@@ -8,6 +8,9 @@ __pycache__/
 data/raw/
 data/clean/*.tmp
 *.log
+/data/raw/*.csv
+/data/clean/*.csv
+/data/*.log
 
 # Browsers (if used later)
 playwright/.cache/
