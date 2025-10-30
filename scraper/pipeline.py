@@ -2,11 +2,22 @@
 from providers.ca_post.list import iter_agency_links
 from providers.ca_post.parse import deepen_one
 
-def run_ca_post(limit: int = 5, deep: bool = False):
-    """Seed agencies from CA POST and optionally deepen on each site."""
+def run_ca_post(limit: int = 5, deep: bool = False, backoff: float = 0.0):
     seed = list(iter_agency_links(limit=limit))
+    
     if not deep:
         return seed
-    return [deepen_one(row) for row in seed]
 
-__all__ = ["run_ca_post"]
+    out = []
+    total = len(seed)
+    for i, row in enumerate(seed, 1):
+        org = row.get("organization", "?")
+        url = row.get("website", "?")
+        print(f"[{i}/{total}] {org} → {url}")
+        try:
+            out.append(deepen_one(row, backoff=backoff))
+        except Exception as e:
+            print(f"   ! deep error: {e}")
+            out.append(row)
+    return out
+
