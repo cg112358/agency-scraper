@@ -43,7 +43,10 @@ pip install -r requirements.txt
 python cli.py --provider ca_post --limit 5 --out data/raw/sample.csv
 
 # deep scrape with contacts
-python cli.py --provider ca_post --limit 5 --deep --out data/raw/sample.csv
+python cli.py --provider ca_post --limit 5 --deep --backoff .09 --out data/raw/sample.csv
+
+# run a small summary
+python tools/summarize.py data/raw/ca_post_50.csv 
 ```
 
 ---
