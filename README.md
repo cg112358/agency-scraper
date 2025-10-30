@@ -57,27 +57,37 @@ The project is structured around a **provider-based architecture** — each data
 
 ```text
 agency-scraper/
-├── providers/              # Source-specific scrapers (CA POST, others to come)
-│   ├── ca_post/
-│   │   ├── list.py         # Collects outbound agency links
-│   │   ├── parse.py        # Visits agency sites, extracts contact info
-│   │   └── provider.yaml
-│   └── __init__.py
+├─ providers/                        # Source-specific scrapers (CA POST, others later)
+│  └─ ca_post/
+│     ├─ list.py                     # Collects outbound agency links
+│     ├─ parse.py                    # Visits agency sites, extracts contact info
+│     └─ __init__.py
 │
-├── scraper/                # Shared pipeline utilities
-│   ├── pipeline.py         # Entry point for provider execution
-│   ├── normalize.py        # Cleans and formats phone/address data
-│   ├── registry.py         # Manages provider registration
-│   └── models.py
+├─ scraper/                          # Shared pipeline utilities
+│  ├─ browser.py                     # Fetch/retry/backoff helpers
+│  ├─ extract.py                     # Phone/address/JSON-LD extractors
+│  ├─ models.py                      # Typed rows / dataclasses
+│  ├─ normalize.py                   # Phone/address normalization
+│  ├─ pipeline.py                    # Orchestrates a provider run
+│  └─ registry.py                    # Registers/looks up providers
 │
-├── data/                   # Output storage
-│   ├── raw/                # Unprocessed CSVs from runs
-│   └── clean/              # Normalized outputs (future use)
+├─ data/                             # Output storage (not versioned by default)
+│  ├─ raw/                           # Unprocessed CSVs from runs
+│  └─ clean/                         # Normalized/cleaned CSVs (optional to commit)
 │
-├── cli.py                  # Command-line interface
-├── requirements.txt
-├── README.md
-└── LICENSE
+├─ tests/
+│  └─ test_smoke.py                  # Quick sanity test
+│
+├─ tools/
+│  └─ summarize.py                   # Prints success/failure rates (%) + coverage
+│
+├─ cli.py                            # Command-line interface
+├─ .env.example                      # Template env vars (copy to .env; .env is gitignored)
+├─ .gitattributes
+├─ .gitignore
+├─ LICENSE
+├─ README.md
+└─ requirements.txt
 ```
 This structure makes it easy to plug in additional providers, debug in isolation, or extend the normalization pipeline without rewriting shared logic.
 

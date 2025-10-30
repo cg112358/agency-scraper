@@ -1,3 +1,9 @@
+"""Summarize a scraper run:
+- computes success/failure rates (%)
+- reports phone/address coverage
+- accepts input CSV path and prints a one-line summary
+"""
+
 # tools/summarize.py
 import sys, csv, re
 from pathlib import Path
