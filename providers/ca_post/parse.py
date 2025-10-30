@@ -1,24 +1,70 @@
 ﻿from __future__ import annotations
 
-from urllib.parse import urljoin
-from collections.abc import Iterable
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+# stdlib
 import json
 import re
 import time
+from collections.abc import Iterable
+from pathlib import Path
+from urllib.parse import urljoin, urlparse, urlunparse
+
+# third-party
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import usaddress  # in requirements.txt
 
+DATA_DIR = Path("data")
+LOG_PATH = DATA_DIR / "scraper.log"
+DATA_DIR.mkdir(parents=True, exist_ok=True)   # one-time ensure
+
+BLOCKED_HOSTS = ("edgesuite.net", "akamai", "captcha")
+
+def _log(line: str) -> None:
+    with open(LOG_PATH, "a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
+
 # --- polite session with retries ---
+
+def variants(u: str) -> list[str]:
+    """Yield a couple of harmless URL variants to dodge simple 403 blocks."""
+    try:
+        p = urlparse(u)
+    except Exception:
+        return [u]
+
+    outs = [u]
+
+    # flip scheme http<->https
+    if p.scheme in {"http", "https"}:
+        flipped = p._replace(scheme=("https" if p.scheme == "http" else "http"))
+        outs.append(urlunparse(flipped))
+
+    # toggle www.
+    host = p.netloc
+    if host.startswith("www."):
+        outs.append(urlunparse(p._replace(netloc=host[4:])))
+    else:
+        outs.append(urlunparse(p._replace(netloc="www." + host)))
+
+    # de-dup while preserving order
+    seen, uniq = set(), []
+    for x in outs:
+        if x not in seen:
+            uniq.append(x); seen.add(x)
+    return uniq
+
 _session: requests.Session | None = None
 def session() -> requests.Session:
     global _session
     if _session is None:
         s = requests.Session()
         s.headers.update({
-            "User-Agent": "agency-scraper/0.1 (+https://github.com/cg112358/agency-scraper)"
+            "User-Agent": "agency-scraper/0.1 (+https://github.com/cg112358/agency-scraper)",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://post.ca.gov/le-agencies",
         })
         a = HTTPAdapter(
             max_retries=Retry(
@@ -97,14 +143,43 @@ def _find_contact_urls(base_url: str, soup: BeautifulSoup) -> list[str]:
             hits.append(urljoin(base_url, href))
     return list(dict.fromkeys(hits))  # dedupe preserve order
 
-def extract_contacts(url: str) -> dict[str, str]:
+def extract_contacts(url: str, backoff: float = 0.0) -> dict[str, str]:
     """Fetch a single agency site and extract contact info (phones + addresses)."""
-    time.sleep(0.3)  # polite delay, reduced from 0.6
+    start = time.time()
+    print(f"   ↳ visiting {url}")
+    time.sleep(0.3)
+    resp = None
+    # Ensure "data" directory exists once before any logging
+    Path("data").mkdir(parents=True, exist_ok=True)
 
-    # --- main request with shorter connect/read timeouts ---
-    r = session().get(url, timeout=(5, 8))  # (connect, read)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "lxml")
+    resp = None
+    for cand in variants(url)[:3]:
+        try:
+            if backoff:
+                time.sleep(backoff)               # grace pause
+            resp = session().get(cand, timeout=(5, 8))
+            resp.raise_for_status()
+
+            # blocked-hosts guard
+            if any(h in resp.url for h in BLOCKED_HOSTS):
+                elapsed = round(time.time() - start, 2)
+                log_line = f"[BLOCKED] {url} ({elapsed}s) -> {resp.url}"
+                print(f"   🧱 blocked by host ({resp.url}), skipping")
+                _log(log_line)
+                return {"source": url, "phones": ""}
+
+            url = cand  # lock onto the working canonical URL
+            break          
+
+        except requests.exceptions.RequestException as e:
+            print(f"   ⚠️ request failed for variant {cand}: {e}")
+            continue
+
+    if resp is None:
+        print(f"   ⚠️ request failed for all variants")
+        return {"source": url}
+
+    soup = BeautifulSoup(resp.text, "lxml")
 
     # phones on the page
     phones = {normalize_phone(m.group()) for m in PHONE_RE.finditer(soup.get_text(" ", strip=True))}
@@ -113,6 +188,36 @@ def extract_contacts(url: str) -> dict[str, str]:
     # addresses via JSON-LD
     addrs = _jsonld_addresses(soup)
     best_addr = next(iter(addrs), None)
+
+    # If no address on the landing page, follow one likely contact/about page
+    if not best_addr:
+        hits = _find_contact_urls(url, soup)
+        for hit in hits[:1]:  # only one follow to stay polite
+            try:
+                if backoff:
+                    time.sleep(backoff)
+                resp2 = session().get(hit, timeout=(5, 8))
+                resp2.raise_for_status()
+                soup2 = BeautifulSoup(resp2.text, "lxml")
+
+                # try JSON-LD on the contact page
+                addrs2 = _jsonld_addresses(soup2)
+                best_addr = next(iter(addrs2), None)
+
+                # fallback: heuristic on the contact page
+                if not best_addr:
+                    chunks2 = [p.get_text(" ", strip=True)
+                            for p in soup2.select("address, .footer, footer, .contact, p, li")]
+                    for blob in chunks2[:40]:
+                        guess2 = _heuristic_address(blob)
+                        if guess2 and (guess2["address_line"] or guess2["city"] or guess2["zip"]):
+                            best_addr = guess2
+                            break
+
+                if best_addr:
+                    break  # we found something; stop following
+            except requests.exceptions.RequestException:
+                continue
 
     # fallback: heuristic on visible text blocks
     if not best_addr:
@@ -131,31 +236,12 @@ def extract_contacts(url: str) -> dict[str, str]:
         "source":       url,
     }
 
-    # --- follow contact/about pages only if needed ---
-    if not data["phones"] or not data["address_line"]:
-        for contact_url in _find_contact_urls(url, soup)[:2]:  # reduced from 3 → 2
-            try:
-                # shorter timeout for contact pages too
-                c = session().get(contact_url, timeout=(5, 8))
-                c.raise_for_status()
-                contact_soup = BeautifulSoup(c.text, "lxml")
-
-                # extract info again from the contact page
-                contact_data = extract_contacts(contact_url)
-            except Exception:
-                continue
-
-            # prefer filled fields
-            for k in ("address_line", "city", "zip", "phones"):
-                if not data.get(k) and contact_data.get(k):
-                    data[k] = contact_data[k]
-
-            if data["phones"] and data["address_line"]:
-                break
+    elapsed = round(time.time() - start, 2)
+    print(f"   ✅ done in {elapsed}s\n")
 
     return data
 
-def deepen_one(row: dict[str,str]) -> dict[str,str]:
+def deepen_one(row: dict[str,str], backoff: float = 0.0) -> dict[str,str]:
     """Given a seed row with 'website', visit and enrich with contacts."""
     try:
         enriched = extract_contacts(row["website"])

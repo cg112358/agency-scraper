@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from bs4.element import Tag, AttributeValueList
 from urllib.parse import urljoin
 import requests
-
+import re
 SEED_URL = "https://post.ca.gov/le-agencies"
 
 def iter_agency_links(limit: int | None = None) -> Iterator[dict[str, str]]:
@@ -30,8 +30,10 @@ def iter_agency_links(limit: int | None = None) -> Iterator[dict[str, str]]:
         # skip internal anchors / mailto
         if href.startswith("#") or href.startswith("mailto:"):
             continue
-
-        url = urljoin(SEED_URL, href)
+        
+        # clean and absolutize URL
+        url = clean_href(href)
+        url = urljoin(SEED_URL, url)
 
         # skip links that just bounce around POST
         if "post.ca.gov" in url:
@@ -46,3 +48,19 @@ def iter_agency_links(limit: int | None = None) -> Iterator[dict[str, str]]:
 
         if limit and len(seen) >= limit:
             break
+
+HTTP_RE = re.compile(r"(https?://\S+)", re.IGNORECASE)
+
+def clean_href(raw: str) -> str:
+    """
+    Some POST rows contain strings like:
+      'http://old.example/https://new.example/'
+    Keep the last full http(s):// URL; otherwise fall back to raw.
+    """
+    if not isinstance(raw, str):
+        return ""
+    raw = raw.strip()
+    matches = HTTP_RE.findall(raw)
+    if matches:
+        return matches[-1].rstrip(").,;")  # trim common trailing punctuation
+    return raw
