@@ -2,15 +2,35 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
+env/
 .env
 
 # Data
-data/raw/
+data/raw/*             # ignore everything in raw/
+!data/raw/.gitkeep     # ...but keep the placeholder
+
+data/clean/*           # ignore everything in clean/
+!data/clean/.gitkeep   # ...but keep the placeholder
+
+# Optional extra patterns (keep if you like)
 data/clean/*.tmp
 *.log
 /data/raw/*.csv
 /data/clean/*.csv
 /data/*.log
 
+
 # Browsers (if used later)
+playwright/.cache/
+
+# Editors / IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright (if used later)
 playwright/.cache/
