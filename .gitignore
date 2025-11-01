@@ -48,3 +48,6 @@ data/**/*.csv
 data/**/*.json
 data/**/*.log
 
+# Not ignored files
+!.gitkeep
+!data/**/.gitkeep
