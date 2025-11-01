@@ -8,6 +8,14 @@ import requests
 import re
 SEED_URL = "https://post.ca.gov/le-agencies"
 
+# providers/ca_post/list.py
+class CAPostLister:
+    """Return source pages to parse (seed URLs)."""
+    def seeds(self):
+        # TODO: return iterable of URLs
+        return []
+
+
 def iter_agency_links(limit: int | None = None) -> Iterator[dict[str, str]]:
     resp = requests.get(SEED_URL, timeout=20)
     resp.raise_for_status()
