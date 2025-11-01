@@ -1,10 +1,7 @@
-﻿# Python
+﻿# Python cache
 __pycache__/
+*.py[cod]
 *.pyc
-.venv/
-venv/
-env/
-.env
 
 # Data
 data/raw/*             # ignore everything in raw/
@@ -34,3 +31,20 @@ Thumbs.db
 
 # Playwright (if used later)
 playwright/.cache/
+
+# Testing caches
+.mypy_cache/
+
+# Archives
+*.zip
+*.tar.gz
+*.tgz
+
+# Virtual env & editor junk
+.venv/
+
+# Test/artefacts
+data/**/*.csv
+data/**/*.json
+data/**/*.log
+
